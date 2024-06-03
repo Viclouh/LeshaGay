@@ -11,8 +11,11 @@ namespace LeshaGay.Data
     public class Teacher
     {
         [Key]
-        [DatabaseGenerated(DatabaseGeneratedOption.Identity)]
         public int Id { get; set; }
         public string Name { get; set; }
+        public string? Surname { get; set; }
+        public string? Patronymic { get; set; }
+
+        public virtual ICollection<LessonTeacher> LessonTeachers { get; set; }
     }
 }
