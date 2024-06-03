@@ -1,19 +1,10 @@
-﻿using System;
-using System.Collections.Generic;
-using System.ComponentModel.DataAnnotations;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
-
-namespace LeshaGay.Data
+﻿namespace API.Models
 {
     public class Audience
     {
-        [Key]
         public int Id { get; set; }
         public string Number { get; set; }
-        public int AudienceTypeId { get; set; }
-
-        public virtual ICollection<LessonPlan> LessonPlans { get; set; }
+        public int? AudienceTypeId { get;set; }
+        public AudienceType? AudienceType { get;set; }
     }
 }

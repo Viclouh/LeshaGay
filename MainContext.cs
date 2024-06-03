@@ -1,4 +1,4 @@
-﻿using LeshaGay.Data;
+﻿using API.Models;
 
 using Microsoft.EntityFrameworkCore;
 
@@ -25,10 +25,31 @@ namespace LeshaGay
             }
             
         }
-        public DbSet<Teacher> Teachers { get; set; }
+        public DbSet<AudienceType> AudienceType { get; set; }
+        public DbSet<Audience> Audience { get; set; }
+
+        public DbSet<Subject> Subject { get; set; }
+
+        public DbSet<Speciality> Speciality { get; set; }
+        public DbSet<Group> Group { get; set; }
+
+        public DbSet<Teacher> Teacher { get; set; }
+        public DbSet<TeacherSubject> TeacherSubject { get; set; }
+        public DbSet<GroupTeacher> GroupTeacher { get; set; }
+
+        public DbSet<LessonPlan> LessonPlan { get; set; }
+        public DbSet<LessonTeacher> LessonTeacher { get; set; }
+
+        public DbSet<YearBegin> YearBegin { get; set; }
+
+
+        //Auth
+        public DbSet<UserAuthData> UserAuthData { get; set; }
+        public DbSet<User> Users { get; set; }
 
         public MainContext()
         {
+            Database.EnsureDeleted();
             Database.EnsureCreated();
         }
 

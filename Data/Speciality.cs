@@ -1,10 +1,10 @@
 ﻿namespace API.Models
 {
-    public class Teacher
+    public class Speciality
     {
         public int Id { get; set; }
+        public string? Code { get; set; }
         public string Name { get; set; }
-        public string Surname { get; set; }
-        public string Patronymic { get; set; }
+        public string Shortname { get; set; }
     }
 }

@@ -7,23 +7,32 @@ using Newtonsoft.Json.Linq;
 using System.Runtime.Serialization;
 using System.Text.Json.Serialization;
 using LeshaGay;
-using LeshaGay.Data;
+using API.Models;
 using System.Security.Claims;
 using ConsoleTables;
+using LeshaGay.Data;
 
 class Program
 {
+    static Speciality GlobalSpeciality= new () { Name = "", Shortname = "" };
     static void Main(string[] args)
     {
         string filePath = "C:\\Users\\iliya\\Downloads\\responseDepotHelperJson.json";
         string json = File.ReadAllText(filePath);
+        Console.WriteLine("Подготовка данных");
         var workloadData = PrepareData(json, "oneSem");
 
-        var geneticAlgorithm = new GeneticAlgorithm(workloadData, populationSize: 50);
-        var bestSchedule = geneticAlgorithm.Run(generations: 100);
+        Console.WriteLine("Генерация");
+        var geneticAlgorithm = new GeneticAlgorithm(workloadData, populationSize: 50, mutationRate: 0.2);
+        Schedule bestSchedule = geneticAlgorithm.Run(generations: 1000);
+        
+
+        MainContext.Instance.LessonPlan.AddRange(bestSchedule.LessonPlans);
+        MainContext.Instance.SaveChanges();
 
         // Вывод результатов
-        PrintSchedule(bestSchedule.LessonPlans);
+        Console.WriteLine("Готово. Счёт ошибок: " + bestSchedule.Fitness);
+        //PrintSchedule(bestSchedule.LessonPlans);
 
 
     }
@@ -32,17 +41,25 @@ class Program
         var originalArray = JArray.Parse(json);
         var transformedArray = new Dictionary<Group, List<WorkloadTeachers>>();
         var teacherCache = new Dictionary<string, Teacher>();
+        var subjectCache = new Dictionary<int, Subject>();
 
         // Кэшируем всех учителей из базы данных заранее
-        var allTeachers = MainContext.Instance.Teachers.ToList();
+        var allTeachers = MainContext.Instance.Teacher.ToList();
         foreach (var teacher in allTeachers)
         {
             teacherCache[teacher.Name] = teacher;
         }
 
+        // Кэшируем все предметы из базы данных заранее
+        var allSubjects = MainContext.Instance.Subject.ToList();
+        foreach (var subject in allSubjects)
+        {
+            subjectCache[subject.Id] = subject;
+        }
+
         foreach (var item in originalArray)
         {
-            var group = new Group() { Name = item["group"]["name"].Value<string>() };
+            var group = new Group() { Name = item["group"]["name"].Value<string>(), Speciality = GlobalSpeciality };
             var workloadTeachersList = new List<WorkloadTeachers>();
             var preloadArray = item["preload"];
 
@@ -55,11 +72,21 @@ class Program
                     continue;
 
                 var discipline = preloadItem["Discipline"];
-                var subject = new Subject
+                var subjectId = discipline["Id"].Value<int>();
+                var subjectName = discipline["Name"].Value<string>();
+
+                if (!subjectCache.TryGetValue(subjectId, out var subject))
                 {
-                    Id = discipline["Id"].Value<int>(),
-                    Name = discipline["Name"].Value<string>()
-                };
+                    subject = new Subject
+                    {
+                        Id = subjectId,
+                        Name = subjectName,
+                        Shortname = subjectName,
+                    };
+                    MainContext.Instance.Add(subject);
+                    MainContext.Instance.SaveChanges();
+                    subjectCache[subjectId] = subject;
+                }
 
                 var courseSummary = preloadItem["PedagogicalHours"]["CourseSummary"].ToObject<int?[]>();
                 int? hoursPerWeek = (courseSummary != null && courseSummary.Length >= semester) ? courseSummary[semester] : null;
@@ -81,7 +108,7 @@ class Program
                 {
                     if (!teacherCache.TryGetValue(teacherName, out var teacher))
                     {
-                        teacher = new Teacher { Name = teacherName };
+                        teacher = new Teacher { Name = "", Surname = teacherName, Patronymic = "" };
                         MainContext.Instance.Add(teacher);
                         MainContext.Instance.SaveChanges();
                         teacherCache[teacherName] = teacher;
@@ -104,7 +131,7 @@ class Program
         foreach (var group in lessonPlans.GroupBy(lp => lp.Group.Name))
         {
             Console.WriteLine($"groupname: {group.Key}");
-            foreach (var dayGroup in group.GroupBy(lp => lp.WeekDay))
+            foreach (var dayGroup in group.GroupBy(lp => lp.Weekday))
             {
                 Console.WriteLine($"+-------------+");
                 Console.WriteLine($"| {((DayOfWeek)dayGroup.Key).ToString().ToLower()}|");
