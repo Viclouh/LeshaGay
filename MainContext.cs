@@ -1,6 +1,4 @@
-﻿using API.Models;
-
-using Microsoft.EntityFrameworkCore;
+﻿using Microsoft.EntityFrameworkCore;
 
 using System;
 using System.Collections.Generic;
@@ -25,23 +23,20 @@ namespace LeshaGay
             }
             
         }
-        public DbSet<AudienceType> AudienceType { get; set; }
-        public DbSet<Audience> Audience { get; set; }
-
-        public DbSet<Subject> Subject { get; set; }
-
-        public DbSet<Speciality> Speciality { get; set; }
-        public DbSet<Group> Group { get; set; }
-
-        public DbSet<Teacher> Teacher { get; set; }
-        public DbSet<TeacherSubject> TeacherSubject { get; set; }
-        public DbSet<GroupTeacher> GroupTeacher { get; set; }
-
-        public DbSet<LessonPlan> LessonPlan { get; set; }
-        public DbSet<LessonTeacher> LessonTeacher { get; set; }
+        public DbSet<ScheduleStatus> ScheduleStatuses { get; set; }
+        public DbSet<Schedule> Schedules { get; set; }
+        public DbSet<Lesson> Lessons { get; set; }
+        public DbSet<Change> Changes { get; set; }
+        public DbSet<Classroom> Classrooms { get; set; }
+        public DbSet<ClassroomType> ClassroomTypes { get; set; }
+        public DbSet<LessonGroup> LessonGroups { get; set; }
+        public DbSet<Teacher> Teachers { get; set; }
+        public DbSet<TeacherSubject> TeacherSubjects { get; set; }
+        public DbSet<LessonGroupTeacher> LessonGroupTeachers { get; set; }
+        public DbSet<Subject> Subjects { get; set; }
+        public DbSet<Group> Groups { get; set; }
 
         public DbSet<YearBegin> YearBegin { get; set; }
-
 
         //Auth
         public DbSet<UserAuthData> UserAuthData { get; set; }
@@ -55,7 +50,7 @@ namespace LeshaGay
 
         protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
         {
-            optionsBuilder.UseNpgsql("Server=hnt8.ru;Port=5432;Database=temptesting;UserID=postgres;Password=_RasulkotV2");
+            optionsBuilder.UseNpgsql("Server=hnt8.ru;Port=5432;Database=generationtesting;UserID=postgres;Password=_RasulkotV2");
         }
     }
 }

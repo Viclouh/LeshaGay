@@ -1,5 +1,4 @@
-﻿using API.Models;
-
+﻿
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -12,7 +11,7 @@ namespace LeshaGay.Data
 
     public class Schedule
     {
-        public List<LessonPlan> LessonPlans { get; set; } = new List<LessonPlan>();
+        public List<Lesson> LessonPlans { get; set; } = new List<Lesson>();
         public int Fitness { get; set; }
     }
 }
