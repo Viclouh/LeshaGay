@@ -32,11 +32,11 @@ namespace LeshaGay
         }
         public List<Lesson> RunGeneticAlgorithm(int threads)
         {
-            InitializePopulation();            
+            InitializePopulation();
+            List<LeshaGay.Data.Schedule> newPopulation = new List<LeshaGay.Data.Schedule>();
 
             for (int i = 0; i < numberOfGenerations; i++)
-            {
-                List<LeshaGay.Data.Schedule> newPopulation = new List<LeshaGay.Data.Schedule>();
+            {               
                 newPopulation = Population.OrderByDescending(s => s.Fitness).Take(populationSize / 10).ToList();
 
                 List<Task> tasks = new List<Task>();
@@ -64,8 +64,9 @@ namespace LeshaGay
                 }
                 Task.WaitAll(tasks.ToArray());
 
-                Population = newPopulation;
+                Population = new(newPopulation);
                 Console.WriteLine($"Generation {i + 1}: generated");
+                newPopulation.Clear();
             }
 
             return Population.OrderBy(p => p.Fitness).First().LessonPlans;
@@ -82,47 +83,6 @@ namespace LeshaGay
                 schedules.Add(child);
             }
             return schedules;
-        }
-        public List<Lesson> RunGeneticAlgorithm()
-        {
-            // Инициализация начальной популяции
-            InitializePopulation();
-
-            for (int generation = 0; generation < numberOfGenerations; generation++)
-            {
-                List<LeshaGay.Data.Schedule> newPopulation = new List<LeshaGay.Data.Schedule>();
-
-                // Отбор лучших расписаний для сохранения в следующем поколении
-                Population = Population.OrderByDescending(s => s.Fitness).ToList();
-
-                int eliteCount = populationSize / 10; // Сохраняем 10% лучших расписаний
-                newPopulation.AddRange(Population.Take(eliteCount));
-
-                // Выполняем кроссовер для создания нового поколения
-                while (newPopulation.Count < populationSize)
-                {
-                    LeshaGay.Data.Schedule parent1 = SelectParent();
-                    LeshaGay.Data.Schedule parent2 = SelectParent();
-
-                    LeshaGay.Data.Schedule child = Crossover(parent1, parent2);
-
-                    // Выполняем мутацию для нового расписания
-                    Mutate(child);
-
-                    newPopulation.Add(child);
-                }
-
-                Population = newPopulation;
-
-                // Вычисляем фитнес для нового поколения
-                foreach (var schedule in Population)
-                {
-                    CalculateFitness(schedule);
-                }
-
-                Console.WriteLine($"Generation {generation + 1}: Best Fitness = {Population.First().Fitness}");
-            }
-            return Population.OrderBy(p=> p.Fitness).First().LessonPlans;
         }
 
         private LeshaGay.Data.Schedule SelectParent()
@@ -262,46 +222,67 @@ namespace LeshaGay
 
             schedule.Fitness = fitness;
         }
-        private void SwapRandom(LeshaGay.Data.Schedule a, LeshaGay.Data.Schedule b)
-        {
-            int index1 = random.Next(a.LessonPlans.Count);
-            int index2 = random.Next(b.LessonPlans.Count);
-
-            Lesson lesson1 = a.LessonPlans[index1];
-            Lesson lesson2 = b.LessonPlans[index2];
-
-            // Создаем копию урока с замененными полями
-            Lesson tempLesson = new Lesson
-            {
-                DayOfWeek = lesson2.DayOfWeek,
-                LessonNumber = lesson2.LessonNumber,
-                LessonGroup = lesson1.LessonGroup // Предположим, что у урока есть поле "Teacher"
-            };
-
-            // Меняем поля
-            a.LessonPlans[index1] = tempLesson;
-        }
 
         public LeshaGay.Data.Schedule Crossover(LeshaGay.Data.Schedule parent1, LeshaGay.Data.Schedule parent2)
         {
             LeshaGay.Data.Schedule child = new LeshaGay.Data.Schedule();
 
-            for (int i = 0; i < parent1.LessonPlans.Count; i++)
-            {
-                // Берем случайный урок из одного из родителей
-                Lesson lesson = (random.Next(2) == 0) ? parent1.LessonPlans[i] : parent2.LessonPlans[i];
+            // Группируем уроки по LessonGroup
+            var groupedLessonsParent1 = parent1.LessonPlans.GroupBy(l => l.LessonGroup).ToDictionary(g => g.Key, g => g.ToList());
+            var groupedLessonsParent2 = parent2.LessonPlans.GroupBy(l => l.LessonGroup).ToDictionary(g => g.Key, g => g.ToList());
 
-                // Добавляем урок в расписание ребенка
-                child.LessonPlans.Add(new Lesson
+            // Перебираем каждую группу
+            foreach (var group in groupedLessonsParent1.Keys.Union(groupedLessonsParent2.Keys))
+            {
+                var lessons1 = groupedLessonsParent1.ContainsKey(group) ? groupedLessonsParent1[group] : new List<Lesson>();
+                var lessons2 = groupedLessonsParent2.ContainsKey(group) ? groupedLessonsParent2[group] : new List<Lesson>();
+
+                // Создаем словарь для объединения уроков по (DayOfWeek, LessonNumber)
+                var combinedLessons = new Dictionary<(int DayOfWeek, int LessonNumber), Lesson>();
+
+                foreach (var lesson in lessons1)
                 {
-                    DayOfWeek = lesson.DayOfWeek,
-                    LessonNumber = lesson.LessonNumber,
-                    LessonGroup = lesson.LessonGroup,
-                    IsRemote = lesson.IsRemote,
-                    WeekOrderNumber = lesson.WeekOrderNumber,
-                    Classroom = lesson.Classroom,
-                    Schedule = lesson.Schedule
-                });
+                    var key = (lesson.DayOfWeek, lesson.LessonNumber);
+                    if (!combinedLessons.ContainsKey(key))
+                    {
+                        combinedLessons[key] = lesson;
+                    }
+                }
+
+                foreach (var lesson in lessons2)
+                {
+                    var key = (lesson.DayOfWeek, lesson.LessonNumber);
+                    if (!combinedLessons.ContainsKey(key))
+                    {
+                        combinedLessons[key] = lesson;
+                    }
+                }
+
+                // Добавляем уроки в расписание ребенка с заменой по дням и номерам пар
+                foreach (var key in combinedLessons.Keys)
+                {
+                    Lesson lesson = combinedLessons[key];
+                    // Берем случайный урок из одного из родителей
+                    Lesson selectedLesson = (random.Next(2) == 0) ?
+                        lessons1.FirstOrDefault(l => l.DayOfWeek == key.DayOfWeek && l.LessonNumber == key.LessonNumber) :
+                        lessons2.FirstOrDefault(l => l.DayOfWeek == key.DayOfWeek && l.LessonNumber == key.LessonNumber);
+
+                    if (selectedLesson == null)
+                    {
+                        selectedLesson = lesson;
+                    }
+
+                    child.LessonPlans.Add(new Lesson
+                    {
+                        DayOfWeek = selectedLesson.DayOfWeek,
+                        LessonNumber = selectedLesson.LessonNumber,
+                        LessonGroup = selectedLesson.LessonGroup,
+                        IsRemote = selectedLesson.IsRemote,
+                        WeekOrderNumber = selectedLesson.WeekOrderNumber,
+                        Classroom = selectedLesson.Classroom,
+                        Schedule = selectedLesson.Schedule
+                    });
+                }
             }
 
             return child;
@@ -362,23 +343,5 @@ namespace LeshaGay
             return true;
         }
 
-        private bool IsValidLesson(Lesson lesson, List<Lesson> currentLessons)
-        {
-            // Проверка на наличие окна в расписании группы
-            var groupLessons = currentLessons.Where(l => l.LessonGroup.Group.Id == lesson.LessonGroup.Group.Id && l.DayOfWeek == lesson.DayOfWeek).ToList();
-            groupLessons.Add(lesson);
-            groupLessons = groupLessons.OrderBy(l => l.LessonNumber).ToList();
-
-            for (int i = 1; i < groupLessons.Count; i++)
-            {
-                int gap = groupLessons[i].LessonNumber - groupLessons[i - 1].LessonNumber;
-                if (gap > 1)
-                {
-                    return false; // Если есть окно, то недопустимый урок
-                }
-            }
-
-            return true;
-        }
     }
 }

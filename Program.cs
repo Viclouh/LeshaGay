@@ -30,7 +30,7 @@ class Program
         Random random = new Random();
         // Генерация начальной популяции
         GeneticGenerator generator = new GeneticGenerator(workloadData, populationSize, numberOfGenerations, mutationRate);
-        var result = generator.RunGeneticAlgorithm(30);
+        var result = generator.RunGeneticAlgorithm(10);
 
         MainContext.Instance.Lessons.AddRange(result);
         MainContext.Instance.SaveChanges();
@@ -141,51 +141,3 @@ class Program
         return transformedArray;
     }
 }
-
-// Классы модели
-
-    //static void PrintScheduleTable(Schedule schedule)
-    //{
-    //    foreach (var classEntry in schedule.Timetable)
-    //    {
-    //        Console.WriteLine($"Class: {classEntry.Key.Name}");
-    //        Console.WriteLine("Week  | Day | Para | Subject          | Teachers       | Classroom");
-
-    //        foreach (var weekEntry in classEntry.Value)
-    //        {
-    //            foreach (var dayEntry in weekEntry.Value)
-    //            {
-    //                foreach (var paraEntry in dayEntry.Value)
-    //                {
-    //                    var (subject, teachers, classroom) = paraEntry.Value;
-    //                    string teachersNames = string.Join(", ", teachers.Select(t => t.Name));
-    //                    Console.WriteLine($"{weekEntry.Key + 1,-6}| {dayEntry.Key,-4}| {paraEntry.Key,-5}| {subject.Name,-16}| {teachersNames,-14}| {classroomNumber,-9}");
-    //                }
-    //            }
-    //        }
-
-    //        Console.WriteLine();
-    //    }
-    //}
-    //static void PrintSchedule(Schedule schedule)
-    //{
-    //    foreach (var classEntry in schedule.Timetable)
-    //    {
-    //        Console.WriteLine($"Class: {classEntry.Key.Name}");
-    //        foreach (var weekEntry in classEntry.Value)
-    //        {
-    //            Console.WriteLine($"  Week: {weekEntry.Key + 1}");
-    //            foreach (var dayEntry in weekEntry.Value)
-    //            {
-    //                Console.WriteLine($"    Day: {dayEntry.Key}");
-    //                foreach (var paraEntry in dayEntry.Value)
-    //                {
-    //                    var (subject, teachers, classroom) = paraEntry.Value;
-    //                    string teachersNames = string.Join(", ", teachers.Select(t => t.Name));
-    //                    Console.WriteLine($"      Para: {paraEntry.Key}, Subject: {subject.Name}, Teachers: {teachersNames}");
-    //                }
-    //            }
-    //        }
-    //        Console.WriteLine();
-    //    }
-    //}
