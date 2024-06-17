@@ -11,6 +11,6 @@ namespace LeshaGay.Data
     {
         public Subject Subject { get; set; }
         public List<Teacher> Teachers { get; set; }
-        public int HoursPerWeek { get; set; }
+        public double HoursPerWeek { get; set; }
     }
 }

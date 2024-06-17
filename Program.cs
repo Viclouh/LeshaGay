@@ -6,6 +6,7 @@ using System.Text.Json.Nodes;
 using Newtonsoft.Json.Linq;
 using System.Runtime.Serialization;
 using System.Text.Json.Serialization;
+using Microsoft.EntityFrameworkCore;
 using LeshaGay;
 using System.Security.Claims;
 using ConsoleTables;
@@ -16,21 +17,21 @@ class Program
 {
     static void Main(string[] args)
     {
-        string filePath = "C:\\Users\\iliya\\Downloads\\responseDepotHelperJson.json";
+        string filePath = "C:\\Users\\User\\Source\\Repos\\Viclouh\\LeshaGay\\message.json";
         string json = File.ReadAllText(filePath);
         Console.WriteLine("Подготовка данных");
         var workloadData = PrepareData(json, "oneSem");
 
         Console.WriteLine("Генерация");
 
-
+        int threads = 1;
         int populationSize = 100;
-        int numberOfGenerations = 100;
-        double mutationRate = 0.2;
+        int numberOfGenerations = 500;
+        double mutationRate = 90;
         Random random = new Random();
         // Генерация начальной популяции
         GeneticGenerator generator = new GeneticGenerator(workloadData, populationSize, numberOfGenerations, mutationRate);
-        var result = generator.RunGeneticAlgorithm(10);
+        var result = generator.RunGeneticAlgorithm(threads);
 
         MainContext.Instance.Lessons.AddRange(result);
         MainContext.Instance.SaveChanges();
@@ -67,7 +68,7 @@ class Program
             var preloadArray = item["preload"];
 
             var semester = item["group"][semesterName].ToObject<int>();
-            var twoSemWeeks = item["parserData"]["TwoSemWeeks"].ToObject<int>();
+            var semWeeks = item["parserData"][GetSemestrFukingName(semester)].ToObject<int>();
 
             foreach (var preloadItem in preloadArray)
             {
@@ -91,8 +92,8 @@ class Program
                 }
 
                 var courseSummary = preloadItem["PedagogicalHours"]["CourseSummary"].ToObject<int?[]>();
-                int? hoursPerWeek = (courseSummary != null && courseSummary.Length >= semester) ? courseSummary[semester] : null;
-                int calculatedHoursPerWeek = hoursPerWeek.HasValue ? hoursPerWeek.Value / twoSemWeeks : 0;
+                double? hoursBySemestr = (courseSummary != null && courseSummary.Length >= semester) ? courseSummary[semester] : null;
+                double calculatedHoursPerWeek = hoursBySemestr.HasValue ? hoursBySemestr.Value / semWeeks : 0;
 
                 var workloadTeacher = new WorkloadTeachers
                 {
@@ -139,5 +140,34 @@ class Program
         MainContext.Instance.SaveChanges();
 
         return transformedArray;
+    }
+
+    private static string GetSemestrFukingName(int num)
+    {
+        switch (num)
+        {
+            case 0:
+                return "OneSemWeeks";
+            case 1:
+                return "TwoSemWeeks";
+            case 2:
+                return "ThreeSemWeeks";
+            case 3:
+                return "FourSemWeeks";
+            case 4:
+                return "FiveSemWeeks";
+            case 5:
+                return "SixSemWeeks";
+            case 6:
+                return "SevenSemWeeks";
+            case 7:
+                return "EightSemWeeks";
+            case 8:
+                return "NineSemWeeks";
+            case 9:
+                return "TeenSemWeeks";
+            default:
+                return "OneSemWeeks";
+        }
     }
 }

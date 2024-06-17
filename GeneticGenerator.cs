@@ -1,18 +1,35 @@
 ﻿using LeshaGay.Data;
 
 using System;
-using System.Collections.Generic;
+using System.Collections.Concurrent;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
+using Microsoft.EntityFrameworkCore;
+
 
 using ModelSchedule = LeshaGay.Schedule;
 using Schedule = LeshaGay.Data.Schedule;
+using System.Collections;
 
 namespace LeshaGay
 {
     public class GeneticGenerator
     {
+        private Schedule _schedule = new Schedule()
+        {
+            AcademicYear = DateTime.Now.Year,
+            Semester = 1,
+            ScheduleStatus = new ScheduleStatus()
+            {
+                Name = "чёрный"
+            }
+        };
+        private Classroom _classroom = new Classroom()
+        {
+            Number = "Нет"
+        };
+
         private int populationSize;
         private int numberOfGenerations;
         private double mutationRate;
@@ -23,21 +40,26 @@ namespace LeshaGay
 
         public GeneticGenerator(Dictionary<Group, List<WorkloadTeachers>> workload, int populationSize, int numberOfGenerations, double mutationRate)
         {
-            this.Workload = workload;
+            this.Workload = new (workload);
             this.populationSize = populationSize;
             this.numberOfGenerations = numberOfGenerations;
             this.mutationRate = mutationRate;
             this.random = new Random((int)DateTime.Now.Ticks);
             this.Population = new List<LeshaGay.Data.Schedule>();
         }
+
         public List<Lesson> RunGeneticAlgorithm(int threads)
         {
             InitializePopulation();
-            List<LeshaGay.Data.Schedule> newPopulation = new List<LeshaGay.Data.Schedule>();
 
             for (int i = 0; i < numberOfGenerations; i++)
-            {               
-                newPopulation = Population.OrderByDescending(s => s.Fitness).Take(populationSize / 10).ToList();
+            {
+                BlockingCollection<Data.Schedule> newPopulation = new BlockingCollection<Data.Schedule>();
+
+                foreach(var item in Population.OrderByDescending(s => s.Fitness).Take(populationSize / 10))
+                {
+                    newPopulation.Add(item);
+                }
 
                 List<Task> tasks = new List<Task>();
                 for (int j = 0; j < threads; j++)
@@ -48,7 +70,10 @@ namespace LeshaGay
                     {
                         Task bigTask = new Task(() =>
                         {
-                            newPopulation.AddRange(GenPopulation(sizeTasks + 1));
+                            foreach (var item in GenPopulation(sizeTasks + 1))
+                            { 
+                                newPopulation.Add(item);
+                            }
                         });
                         bigTask.Start();
                         tasks.Add(bigTask);
@@ -56,7 +81,10 @@ namespace LeshaGay
                     else { 
                         Task littleTask = new Task(() =>
                         {
-                            newPopulation.AddRange(GenPopulation(sizeTasks));
+                            foreach (var item in GenPopulation(sizeTasks))
+                            {
+                                newPopulation.Add(item);
+                            }
                         });
                         littleTask.Start();
                         tasks.Add(littleTask);
@@ -64,20 +92,21 @@ namespace LeshaGay
                 }
                 Task.WaitAll(tasks.ToArray());
 
-                Population = new(newPopulation);
+                Population = new((Data.Schedule[])newPopulation.ToArray());
                 Console.WriteLine($"Generation {i + 1}: generated");
-                newPopulation.Clear();
             }
 
             return Population.OrderBy(p => p.Fitness).First().LessonPlans;
 
         }
+
         public List<LeshaGay.Data.Schedule> GenPopulation(int count)
         {
             List<LeshaGay.Data.Schedule> schedules = new List<LeshaGay.Data.Schedule>();
             for (int i = 0; i < count; i++)
             {
                 LeshaGay.Data.Schedule child = Crossover(SelectParent(), SelectParent());
+                //LeshaGay.Data.Schedule child = SelectParent();
                 Mutate(child);
                 CalculateFitness(child);
                 schedules.Add(child);
@@ -103,6 +132,7 @@ namespace LeshaGay
                 Population.Add(schedule);
             }
         }
+
         private LeshaGay.Data.Schedule CreateRandomSchedule()
         {
             LeshaGay.Data.Schedule schedule = new LeshaGay.Data.Schedule();
@@ -114,50 +144,47 @@ namespace LeshaGay
 
                 int currentDay = 1;
                 int currentLessonNumber = 1;
+                int currentWeekNum = 0;
 
                 foreach (var workload in workloads)
                 {
-                    for (int hour = 0; hour < workload.HoursPerWeek; hour++)
+                    LessonGroup lessonGroup = new LessonGroup
                     {
-                        if (currentLessonNumber > 5) // Если больше 5 уроков в день, переход на следующий день
-                        {
-                            currentLessonNumber = 1;
-                            currentDay++;
-                            if (currentDay > 6) currentDay = 1;
-                        }
-
-                        LessonGroup lessonGroup = new LessonGroup
-                        {
-                            Group = group,
-                            Subject = workload.Subject,
-                            LessonGroupTeachers = new List<LessonGroupTeacher>
+                        Group = group,
+                        Subject = workload.Subject,
+                        LessonGroupTeachers = new List<LessonGroupTeacher>
                             {
                                 new LessonGroupTeacher {
                                     Teacher = workload.Teachers.First(),
-                                    Subgroup = 1 
+                                    Subgroup = 1
                                     }
                             },
-                            ScheduleType = "Plain"
-                        };
+                        ScheduleType = "Plain"
+                    };
+
+                    for (double hour = 0; hour < workload.HoursPerWeek; hour+=2)
+                    {
+                        if (currentLessonNumber > 3) // Если больше 5 уроков в день, переход на следующий день
+                        {
+
+                            currentLessonNumber = 1;
+                            currentDay++;
+                            if (currentDay > 6)
+                            {
+                                currentDay = 1;
+                                currentWeekNum++;
+                            }
+
+                        }                        
 
                         Lesson lesson = new Lesson
                         {
                             LessonNumber = currentLessonNumber,
                             DayOfWeek = currentDay,
                             LessonGroup = lessonGroup,
-                            Schedule = new Schedule()
-                            {
-                                AcademicYear = DateTime.Now.Year,
-                                Semester = 1,
-                                ScheduleStatus = new ScheduleStatus()
-                                {
-                                    Name = "чёрный"
-                                }
-                            },
-                            Classroom = new Classroom()
-                            {
-                                Number = "1"
-                            }// Нужно выбрать доступный класс
+                            WeekOrderNumber = currentWeekNum,
+                            Schedule = _schedule,
+                            Classroom = _classroom
                         };
 
                         schedule.LessonPlans.Add(lesson);
@@ -205,6 +232,7 @@ namespace LeshaGay
             //}
 
             // Оценка начала дня у группы
+
             foreach (var groupWorkload in Workload)
             {
                 Group group = groupWorkload.Key;
@@ -223,125 +251,148 @@ namespace LeshaGay
             schedule.Fitness = fitness;
         }
 
-        public LeshaGay.Data.Schedule Crossover(LeshaGay.Data.Schedule parent1, LeshaGay.Data.Schedule parent2)
+        public Lesson? SwapRandomLessons(List<Lesson> lessons1, List<Lesson> lessons2)
         {
-            LeshaGay.Data.Schedule child = new LeshaGay.Data.Schedule();
+            int randWeekday = random.Next(0, 7);
+            int randLessonNum = random.Next(0, 6);
 
-            // Группируем уроки по LessonGroup
-            var groupedLessonsParent1 = parent1.LessonPlans.GroupBy(l => l.LessonGroup).ToDictionary(g => g.Key, g => g.ToList());
-            var groupedLessonsParent2 = parent2.LessonPlans.GroupBy(l => l.LessonGroup).ToDictionary(g => g.Key, g => g.ToList());
 
-            // Перебираем каждую группу
-            foreach (var group in groupedLessonsParent1.Keys.Union(groupedLessonsParent2.Keys))
+            Lesson lesson1 = lessons1.Where(l=> l.DayOfWeek == randWeekday && l.LessonNumber == randLessonNum).FirstOrDefault();
+            Lesson lesson2 = lessons2.Where(l => l.DayOfWeek == randWeekday && l.LessonNumber == randLessonNum).FirstOrDefault();
+            
+            if (random.Next(0, 2) == 0)
             {
-                var lessons1 = groupedLessonsParent1.ContainsKey(group) ? groupedLessonsParent1[group] : new List<Lesson>();
-                var lessons2 = groupedLessonsParent2.ContainsKey(group) ? groupedLessonsParent2[group] : new List<Lesson>();
-
-                // Создаем словарь для объединения уроков по (DayOfWeek, LessonNumber)
-                var combinedLessons = new Dictionary<(int DayOfWeek, int LessonNumber), Lesson>();
-
-                foreach (var lesson in lessons1)
+                if (lesson1 != null)
                 {
-                    var key = (lesson.DayOfWeek, lesson.LessonNumber);
-                    if (!combinedLessons.ContainsKey(key))
-                    {
-                        combinedLessons[key] = lesson;
-                    }
+                    lesson1 = lesson1.Clone();
+                    (lesson1.LessonNumber, lesson1.DayOfWeek) = (randLessonNum, randWeekday);
                 }
-
-                foreach (var lesson in lessons2)
-                {
-                    var key = (lesson.DayOfWeek, lesson.LessonNumber);
-                    if (!combinedLessons.ContainsKey(key))
-                    {
-                        combinedLessons[key] = lesson;
-                    }
-                }
-
-                // Добавляем уроки в расписание ребенка с заменой по дням и номерам пар
-                foreach (var key in combinedLessons.Keys)
-                {
-                    Lesson lesson = combinedLessons[key];
-                    // Берем случайный урок из одного из родителей
-                    Lesson selectedLesson = (random.Next(2) == 0) ?
-                        lessons1.FirstOrDefault(l => l.DayOfWeek == key.DayOfWeek && l.LessonNumber == key.LessonNumber) :
-                        lessons2.FirstOrDefault(l => l.DayOfWeek == key.DayOfWeek && l.LessonNumber == key.LessonNumber);
-
-                    if (selectedLesson == null)
-                    {
-                        selectedLesson = lesson;
-                    }
-
-                    child.LessonPlans.Add(new Lesson
-                    {
-                        DayOfWeek = selectedLesson.DayOfWeek,
-                        LessonNumber = selectedLesson.LessonNumber,
-                        LessonGroup = selectedLesson.LessonGroup,
-                        IsRemote = selectedLesson.IsRemote,
-                        WeekOrderNumber = selectedLesson.WeekOrderNumber,
-                        Classroom = selectedLesson.Classroom,
-                        Schedule = selectedLesson.Schedule
-                    });
-                }
+                return lesson1;
             }
-
-            return child;
+            else
+            {
+                if (lesson2 != null)
+                {
+                    lesson2 = lesson2.Clone();
+                    (lesson2.LessonNumber, lesson2.DayOfWeek) = (randLessonNum, randWeekday);
+                }
+                return lesson2;
+            }
         }
 
+        public LeshaGay.Data.Schedule Crossover(LeshaGay.Data.Schedule parent1, LeshaGay.Data.Schedule parent2)
+        {
+            var childSchedule = new LeshaGay.Data.Schedule();
+
+            // Group lessons by LessonGroupId
+            var groupedLessons1 = parent1.LessonPlans.GroupBy(lesson => lesson.LessonGroupId).ToDictionary(g => g.Key, g => g.ToList());
+            var groupedLessons2 = parent2.LessonPlans.GroupBy(lesson => lesson.LessonGroupId).ToDictionary(g => g.Key, g => g.ToList());
+
+            var allGroupIds = groupedLessons1.Keys.Union(groupedLessons2.Keys).Distinct();
+
+            foreach (var groupId in allGroupIds)
+            {
+                if (groupedLessons1.TryGetValue(groupId, out var lessons1) && groupedLessons2.TryGetValue(groupId, out var lessons2))
+                {
+                    List<Lesson> selectedLessons = random.Next(2) ==0 ? lessons1 : lessons2;
+                    childSchedule.LessonPlans.AddRange(selectedLessons);
+                }       
+            }
+
+            return childSchedule;
+        }
 
         public void Mutate(LeshaGay.Data.Schedule schedule)
         {
-            foreach (var lesson in schedule.LessonPlans)
+            var groupedLessons = schedule.LessonPlans.GroupBy(lesson => lesson.LessonGroup.Group).ToDictionary(g => g.Key, g => g.ToList());
+
+
+            foreach (var group in groupedLessons.Keys)
             {
-                if (random.Next(100) < mutationRate)
+                if (groupedLessons.TryGetValue(group, out var lessons))
                 {
-                    int targetLessonNum = random.Next(1,6);
-                    int targetWeekDay = random.Next(1,7);
+                    for (int i = 0; i < lessons.Count; i++)
+                    { 
+                        if (random.Next(100) < mutationRate)
+                        {
+                            bool mutationFailed = true;
+                            while (mutationFailed)
+                            {
+                                mutationFailed = false;
+                                int randLessonNum1 = random.Next(1, 5);
+                                int randWeekday1 = random.Next(1, 7);
+                                int randLessonNum2 = random.Next(1, 5);
+                                int randWeekday2 = random.Next(1, 7);
 
-                    Lesson? target = schedule.LessonPlans.Where(l => l.DayOfWeek == targetWeekDay && l.LessonNumber == targetLessonNum).FirstOrDefault();
-                    if (target != null)
-                    {
-                        int tempLessonNum = lesson.LessonNumber;
-                        int tempWeekDay = lesson.DayOfWeek;
+                                Lesson? lesson1 = lessons.Where(l => l.DayOfWeek == randWeekday1 && l.LessonNumber == randLessonNum1).FirstOrDefault();
+                                Lesson? lesson2 = lessons.Where(l => l.DayOfWeek == randWeekday2 && l.LessonNumber == randLessonNum2).FirstOrDefault();
 
-                        lesson.DayOfWeek = targetWeekDay;
-                        lesson.LessonNumber = targetLessonNum;
 
-                        target.DayOfWeek = tempWeekDay;
-                        target.LessonNumber = tempLessonNum;
+
+                                if (lesson2 != null &&
+                                    lesson1 == null &&
+                                    lessons.Where(l => l.DayOfWeek == randWeekday1 && (l.LessonNumber == randLessonNum1 + 1 || l.LessonNumber == randLessonNum1 - 1)).Count() > 0 &&
+                                    lessons.Where(l => l.DayOfWeek == lesson2.DayOfWeek && (l.LessonNumber == lesson2.LessonNumber + 1 || l.LessonNumber == lesson2.LessonNumber - 1)).Count() < 2)
+                                {
+                                    (lesson2.DayOfWeek, lesson2.LessonNumber) = (randWeekday1, randLessonNum1);
+                                }
+                                else if (lesson1 != null &&
+                                    lesson2 == null &&
+                                    lessons.Where(l => l.DayOfWeek == randWeekday2 && (l.LessonNumber == randLessonNum2 + 1 || l.LessonNumber == randLessonNum2 - 1)).Count() > 0 &&
+                                    lessons.Where(l => l.DayOfWeek == lesson1.DayOfWeek && (l.LessonNumber == lesson1.LessonNumber + 1 || l.LessonNumber == lesson1.LessonNumber - 1)).Count() < 2)
+                                {
+                                    (lesson1.DayOfWeek, lesson1.LessonNumber) = (randWeekday2, randLessonNum2);
+                                }
+                                else if (lesson1 != null && lesson2 != null)
+                                {
+                                    int temp = lesson1.DayOfWeek;
+                                    lesson1.DayOfWeek = lesson2.DayOfWeek;
+                                    lesson2.DayOfWeek = temp;
+                                    temp = lesson1.LessonNumber;
+                                    lesson1.LessonNumber = lesson2.LessonNumber;
+                                    lesson2.LessonNumber = temp;
+                                }
+                                else
+                                { 
+                                    mutationFailed = true;
+                                }
+                            }
+                        }
                     }
-
-                    while (schedule.LessonPlans.Where(l => l.DayOfWeek == targetWeekDay && l.LessonNumber == targetLessonNum +1 || l.LessonNumber == targetLessonNum - 1).Count()<=0)
-                    {
-                        targetLessonNum = random.Next(1, 6);
-                        targetWeekDay = random.Next(1, 7);
-                    }
-
-                    lesson.DayOfWeek = targetWeekDay;
-                    lesson.LessonNumber = targetLessonNum;
                 }
             }
+
+
+            //foreach (var lesson in schedule.LessonPlans)
+            //{
+            //    if (random.Next(100) < mutationRate)
+            //    {
+            //        int targetLessonNum = random.Next(1,6);
+            //        int targetWeekDay = random.Next(1,7);
+
+            //        Lesson? target = schedule.LessonPlans.Where(l => l.DayOfWeek == targetWeekDay && l.LessonNumber == targetLessonNum).FirstOrDefault();
+            //        if (target != null)
+            //        {
+            //            int tempLessonNum = lesson.LessonNumber;
+            //            int tempWeekDay = lesson.DayOfWeek;
+
+            //            lesson.DayOfWeek = targetWeekDay;
+            //            lesson.LessonNumber = targetLessonNum;
+
+            //            target.DayOfWeek = tempWeekDay;
+            //            target.LessonNumber = tempLessonNum;
+            //        }
+
+            //        while (schedule.LessonPlans.Where(l => l.DayOfWeek == targetWeekDay && l.LessonNumber == targetLessonNum +1 || l.LessonNumber == targetLessonNum - 1).Count()<=0)
+            //        {
+            //            targetLessonNum = random.Next(1, 6);
+            //            targetWeekDay = random.Next(1, 7);
+            //        }
+
+            //        lesson.DayOfWeek = targetWeekDay;
+            //        lesson.LessonNumber = targetLessonNum;
+            //    }
+            //}
         }
-
-        private bool IsValidSchedule(LeshaGay.Data.Schedule schedule)
-        {
-            var groupLessons = schedule.LessonPlans.GroupBy(l => l.LessonGroup.Group.Id);
-
-            foreach (var group in groupLessons)
-            {
-                var lessons = group.OrderBy(l => l.DayOfWeek).ThenBy(l => l.LessonNumber).ToList();
-                for (int i = 1; i < lessons.Count; i++)
-                {
-                    if (lessons[i].DayOfWeek == lessons[i - 1].DayOfWeek &&
-                        lessons[i].LessonNumber != lessons[i - 1].LessonNumber + 1)
-                    {
-                        return false; // Обнаружено окно
-                    }
-                }
-            }
-
-            return true;
-        }
-
     }
 }
