@@ -26,7 +26,7 @@ class Program
 
         int threads = 1;
         int populationSize = 100;
-        int numberOfGenerations = 500;
+        int numberOfGenerations = 100;
         double mutationRate = 90;
         Random random = new Random();
         // Генерация начальной популяции
