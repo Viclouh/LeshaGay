@@ -177,7 +177,7 @@ namespace LeshaGay
                                     Subgroup = 1 
                                     }
                             },
-                            ScheduleType = 1
+                            ScheduleType = "Plain"
                         };
 
                         Lesson lesson = new Lesson

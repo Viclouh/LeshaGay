@@ -52,5 +52,15 @@ namespace LeshaGay
         {
             optionsBuilder.UseNpgsql("Server=hnt8.ru;Port=5432;Database=generationtesting;UserID=postgres;Password=_RasulkotV2");
         }
+        protected override void OnModelCreating(ModelBuilder modelBuilder)
+        {
+            modelBuilder.Entity<LessonGroupTeacher>()
+            .HasKey(lgt => new { lgt.LessonGroupId, lgt.TeacherId });
+
+            modelBuilder.Entity<TeacherSubject>()
+                .HasKey(ts => new { ts.SubjectId, ts.TeacherId });
+
+            base.OnModelCreating(modelBuilder);
+        }
     }
 }
