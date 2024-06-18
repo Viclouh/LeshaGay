@@ -93,7 +93,7 @@ namespace LeshaGay
                 Task.WaitAll(tasks.ToArray());
 
                 Population = new((Data.Schedule[])newPopulation.ToArray());
-                Console.WriteLine($"Generation {i + 1}: generated, max score: {Population.Max(s=>s.Fitness)}");
+                Console.WriteLine($"Generation {i + 1}: generated, max score: {Population.Max(s=>s.Fitness)}, avg prohod: {Population.OrderByDescending(s => s.Fitness).Take(populationSize / 10).Average(s=>s.Fitness)}");
             }
             return Population.OrderByDescending(p => p.Fitness).First().LessonPlans;
 
@@ -106,7 +106,7 @@ namespace LeshaGay
             {
                 LeshaGay.Data.Schedule child = Crossover(SelectParent(), SelectParent());
                 //LeshaGay.Data.Schedule child = SelectParent();
-                //Mutate(child);
+                Mutate(child);
                 CalculateFitness(child);
                 schedules.Add(child);
             }
@@ -115,9 +115,10 @@ namespace LeshaGay
 
         private LeshaGay.Data.Schedule SelectParent()
         {
+            var topSchedules = Population.OrderByDescending(s => s.Fitness).Take(populationSize / 10).ToList();
             // Простой турнирный отбор
-            LeshaGay.Data.Schedule parent1 = Population[random.Next(Population.Count)];
-            LeshaGay.Data.Schedule parent2 = Population[random.Next(Population.Count)];
+            LeshaGay.Data.Schedule parent1 = topSchedules[random.Next(topSchedules.Count)];
+            LeshaGay.Data.Schedule parent2 = topSchedules[random.Next(topSchedules.Count)];
 
             return parent1.Fitness > parent2.Fitness ? parent1 : parent2;
         }
@@ -199,26 +200,35 @@ namespace LeshaGay
         {
             int fitness = 0;
 
+            //Коллизии у преподов
+            var lessonGroups = schedule.LessonPlans
+               .SelectMany(l => l.LessonGroup.LessonGroupTeachers.Select(t => new { l.DayOfWeek, l.LessonNumber, t.Teacher }))
+               .GroupBy(l => new { l.DayOfWeek, l.LessonNumber, l.Teacher })
+               .Where(g => g.Count() > 1);
+
+            fitness -= lessonGroups.Count()*2;
+
             // Оценка окон между парами у преподавателей
-            var teacherLessons = schedule.LessonPlans
-                .GroupBy(x => x.LessonGroup.LessonGroupTeachers.First().Teacher);
+            //var teacherLessons = schedule.LessonPlans
+            //    .GroupBy(x => x.LessonGroup.LessonGroupTeachers.First().Teacher);
 
-            foreach (var teacherLessonGroup in teacherLessons)
-            {
-                foreach (var dailyLessons in teacherLessonGroup.GroupBy(l => l.DayOfWeek))
-                {
-                    var orderedLessons = dailyLessons.OrderBy(l => l.LessonNumber).ToList();
-                    for (int i = 1; i < orderedLessons.Count; i++)
-                    {
-                        int gap = orderedLessons[i].LessonNumber - orderedLessons[i - 1].LessonNumber;
-                        if (gap > 1)
-                        {
-                            fitness -= (gap - 1); // Штраф за каждое окно
-                        }
-                    }
-                }
-            }
+            //foreach (var teacherLessonGroup in teacherLessons)
+            //{
+            //    foreach (var dailyLessons in teacherLessonGroup.GroupBy(l => l.DayOfWeek))
+            //    {
+            //        var orderedLessons = dailyLessons.OrderBy(l => l.LessonNumber).ToList();
+            //        for (int i = 1; i < orderedLessons.Count; i++)
+            //        {
+            //            int gap = orderedLessons[i].LessonNumber - orderedLessons[i - 1].LessonNumber;
+            //            if (gap > 1)
+            //            {
+            //                fitness -= (gap - 1); // Штраф за каждое окно
+            //            }
+            //        }
+            //    }
+            //}
 
+            //Оценка распределённости дисциплин по разным дням
             var groupedLessons = schedule.LessonPlans.GroupBy(lp => lp.LessonGroup.Group).ToDictionary(g => g.Key, g => g.ToList());
             foreach (var group in groupedLessons.Keys)
             {
@@ -227,9 +237,9 @@ namespace LeshaGay
                     for (int i = 1; i < 7; i++)
                     {
                         var daySchedule = lessons.Where(l => l.DayOfWeek == i).ToList();
-                        for (int j = 1; j < daySchedule.Count-1; j++)
+                        for (int j = 1; j < daySchedule.Count - 1; j++)
                         {
-                            for (int k = j+1; k < daySchedule.Count; k++)
+                            for (int k = j + 1; k < daySchedule.Count; k++)
                             {
                                 if (daySchedule[j].LessonGroup.Equals(daySchedule[k].LessonGroup))
                                 {
@@ -271,6 +281,37 @@ namespace LeshaGay
             }
 
             schedule.Fitness = fitness;
+        }
+        public static int CountTeacherCollisions(IEnumerable<Lesson> lessons)
+        {
+            // Словарь для хранения расписания уроков для каждого преподавателя
+            var teacherSchedules = new Dictionary<int, List<(int DayOfWeek, int LessonNumber)>>();
+
+            // Заполнение словаря данными о расписании уроков
+            foreach (var lesson in lessons)
+            {
+                foreach (var lessonGroupTeacher in lesson.LessonGroup.LessonGroupTeachers)
+                {
+                    int teacherId = lessonGroupTeacher.TeacherId;
+                    if (!teacherSchedules.ContainsKey(teacherId))
+                    {
+                        teacherSchedules[teacherId] = new List<(int, int)>();
+                    }
+                    teacherSchedules[teacherId].Add((lesson.DayOfWeek, lesson.LessonNumber));
+                }
+            }
+
+            // Подсчет коллизий для каждого преподавателя
+            int collisionCount = 0;
+            foreach (var schedule in teacherSchedules.Values)
+            {
+                // Группировка расписания по дню недели и номеру урока
+                var groupedSchedule = schedule.GroupBy(s => new { s.DayOfWeek, s.LessonNumber });
+                // Коллизия возникает, если в группе больше одного урока
+                collisionCount += groupedSchedule.Count(g => g.Count() > 1);
+            }
+
+            return collisionCount;
         }
 
         public Lesson? SwapRandomLessons(List<Lesson> lessons1, List<Lesson> lessons2)
@@ -330,12 +371,11 @@ namespace LeshaGay
         public void Mutate(LeshaGay.Data.Schedule schedule)
         {
             var groupedLessons = schedule.LessonPlans.GroupBy(lesson => lesson.LessonGroup.Group).ToDictionary(g => g.Key, g => g.ToList());
-
-
             foreach (var group in groupedLessons.Keys)
             {
                 if (groupedLessons.TryGetValue(group, out var lessons))
                 {
+
                     for (int i = 0; i < lessons.Count; i++)
                     { 
                         if (random.Next(100) < mutationRate)
@@ -352,39 +392,19 @@ namespace LeshaGay
                                 Lesson? lesson1 = lessons.Where(l => l.DayOfWeek == randWeekday1 && l.WeekOrderNumber == 0 && l.LessonNumber == randLessonNum1).FirstOrDefault();
                                 Lesson? lesson2 = lessons.Where(l => l.DayOfWeek == randWeekday2 && l.WeekOrderNumber == 0 && l.LessonNumber == randLessonNum2).FirstOrDefault();
 
-
-                                if (lesson1 == null && lesson2 == null)
+                                if (CanBeSwaped(lessons,randWeekday1,randWeekday2,randLessonNum1,randLessonNum2))
                                 {
-                                    mutationFailed = true;
+                                    if (lesson1!=null)
+                                    {
+                                        lesson1.DayOfWeek = randWeekday2;
+                                        lesson1.LessonNumber = randLessonNum2;
+                                    }
+                                    if (lesson2!=null)
+                                    {
+                                        lesson2.DayOfWeek = randWeekday1;
+                                        lesson2.LessonNumber = randLessonNum1;
+                                    }
                                 }
-                                else if (lesson1 != null && lesson2 != null)
-                                {
-                                    int temp = lesson1.DayOfWeek;
-                                    lesson1.DayOfWeek = lesson2.DayOfWeek;
-                                    lesson2.DayOfWeek = temp;
-                                    temp = lesson1.LessonNumber;
-                                    lesson1.LessonNumber = lesson2.LessonNumber;
-                                    lesson2.LessonNumber = temp;
-                                }
-                                else if (lesson1 == null
-                                    && IsValidPlace(lessons, randWeekday1, randLessonNum1)
-                                    && CanMove(lessons, lesson2))
-                                {
-                                    lesson2.DayOfWeek = randWeekday1;
-                                    lesson2.LessonNumber = randLessonNum1;
-                                }
-                                else if (lesson2 == null
-                                    && IsValidPlace(lessons, randWeekday2, randLessonNum2)
-                                    && CanMove(lessons, lesson1))
-                                {
-                                    lesson1.DayOfWeek = randWeekday2;
-                                    lesson1.LessonNumber = randLessonNum2;
-                                }
-                                else
-                                {
-                                    mutationFailed = true;
-                                }
-
 
                                 //if (lesson1 == null && lesson2 == null)
                                 //{
@@ -399,26 +419,31 @@ namespace LeshaGay
                                 //    lesson1.LessonNumber = lesson2.LessonNumber;
                                 //    lesson2.LessonNumber = temp;
                                 //}
-                                //else if (lesson1 == null
-                                //    && lessons.Any(l => l.DayOfWeek == randWeekday1 && l.WeekOrderNumber == 0 && (l.LessonNumber == randLessonNum1 + 1 || l.LessonNumber == randLessonNum1 - 1))
-                                //    && !(lessons.Any(l => l.DayOfWeek == lesson2.DayOfWeek && l.WeekOrderNumber == 0 && l.LessonNumber < lesson2.LessonNumber)
-                                //    && lessons.Any(l => l.DayOfWeek == lesson2.DayOfWeek && l.WeekOrderNumber == 0 && l.LessonNumber > lesson2.LessonNumber)))
+                                //else if (randWeekday1 == randWeekday2 && Math.Abs(randLessonNum2-randLessonNum1)==1)
                                 //{
-                                //    lesson2.DayOfWeek = randWeekday1;
-                                //    lesson2.LessonNumber = randLessonNum1;
+                                //    mutationFailed = true;
                                 //}
-                                //else if (lesson2 == null
-                                //    && lessons.Any(l => l.DayOfWeek == randWeekday2 && l.WeekOrderNumber == 0 && (l.LessonNumber == randLessonNum2 + 1 || l.LessonNumber == randLessonNum2 - 1))
-                                //    && !(lessons.Any(l => l.DayOfWeek == lesson1.DayOfWeek && l.WeekOrderNumber == 0 && l.LessonNumber < lesson1.LessonNumber)
-                                //    && lessons.Any(l => l.DayOfWeek == lesson1.DayOfWeek && l.WeekOrderNumber == 0 && l.LessonNumber > lesson1.LessonNumber)))
+                                //else if (lesson1 != null
+                                //    && CanMove(lessons, lesson1)
+                                //    && IsValidPlace(lessons, randWeekday2, randLessonNum2))
                                 //{
                                 //    lesson1.DayOfWeek = randWeekday2;
                                 //    lesson1.LessonNumber = randLessonNum2;
+                                //}
+                                //else if (lesson2 != null
+                                //    && CanMove(lessons, lesson2)
+                                //    && IsValidPlace(lessons, randWeekday1, randLessonNum1))
+                                //{
+                                //    lesson2.DayOfWeek = randWeekday1;
+                                //    lesson2.LessonNumber = randLessonNum1;
                                 //}
                                 //else
                                 //{
                                 //    mutationFailed = true;
                                 //}
+
+
+                                
                             }
                         }
                     }
@@ -438,6 +463,50 @@ namespace LeshaGay
             return lessons.Any(l => l.LessonNumber == (lessonNumber + 1))
                 || lessons.Any(l => l.LessonNumber == (lessonNumber - 1));
         }
-        
+
+        public static bool CanBeSwaped(List<Lesson> lessons, int weekday1, int weekday2, int lessonnum1, int lessonnum2)
+        {
+            var newlessons = new List<Lesson>();
+            foreach (var item in lessons)
+            {
+                newlessons.Add(item.Clone());
+            }
+            Lesson? lesson1 = newlessons.Where(l => l.DayOfWeek == weekday1 && l.WeekOrderNumber == 0 && l.LessonNumber == lessonnum1).FirstOrDefault();
+            Lesson? lesson2 = newlessons.Where(l => l.DayOfWeek == weekday2 && l.WeekOrderNumber == 0 && l.LessonNumber == lessonnum2).FirstOrDefault();
+
+
+            if (lesson1 == null && lesson2 == null)
+            {
+                return false;
+            }            
+            if (lesson1!=null)
+            {
+                lesson1.DayOfWeek = weekday2;
+                lesson1.LessonNumber = lessonnum2;
+            }
+            if (lesson2!= null)
+            {
+                lesson2.DayOfWeek = weekday1;
+                lesson2.LessonNumber = lessonnum1;
+            }
+
+            var checkingList = newlessons.Where(l => l.DayOfWeek == weekday1).OrderBy(l=>l.LessonNumber).ToList();
+            for (int i =0; i < checkingList.Count-1; i++)
+            {
+                if (checkingList[i].LessonNumber + 1 != checkingList[i+1].LessonNumber)
+                {
+                    return false;
+                }
+            }
+            checkingList = newlessons.Where(l => l.DayOfWeek == weekday2).OrderBy(l => l.LessonNumber).ToList();
+            for (int i = 0; i < checkingList.Count - 1; i++)
+            {
+                if (checkingList[i].LessonNumber + 1 != checkingList[i + 1].LessonNumber)
+                {
+                    return false;
+                }
+            }
+            return true;
+        }
     }
 }

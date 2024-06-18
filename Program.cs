@@ -17,7 +17,7 @@ class Program
 {
     static void Main(string[] args)
     {
-        string filePath = "C:\\Users\\User\\Source\\Repos\\Viclouh\\LeshaGay\\message.json";
+        string filePath = "E:\\source\\LeshaGay\\message.json";
         string json = File.ReadAllText(filePath);
         Console.WriteLine("Подготовка данных");
         var workloadData = PrepareData(json, "oneSem");
@@ -25,9 +25,9 @@ class Program
         Console.WriteLine("Генерация");
 
         int threads = 1;
-        int populationSize = 100;
-        int numberOfGenerations = 100;
-        double mutationRate = 90;
+        int populationSize = 50;
+        int numberOfGenerations = 500;
+        double mutationRate = 80;
         Random random = new Random();
         // Генерация начальной популяции
         GeneticGenerator generator = new GeneticGenerator(workloadData, populationSize, numberOfGenerations, mutationRate);
