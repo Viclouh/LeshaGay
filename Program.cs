@@ -25,7 +25,7 @@ class Program
         Console.WriteLine("Генерация");
 
         int threads = 1;
-        int populationSize = 50;
+        int populationSize = 100;
         int numberOfGenerations = 500;
         double mutationRate = 80;
         Random random = new Random();

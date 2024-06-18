@@ -115,12 +115,13 @@ namespace LeshaGay
 
         private LeshaGay.Data.Schedule SelectParent()
         {
-            var topSchedules = Population.OrderByDescending(s => s.Fitness).Take(populationSize / 10).ToList();
+            var top = Population.OrderByDescending(s => s.Fitness).Take(populationSize / 10).ToList();
             // Простой турнирный отбор
-            LeshaGay.Data.Schedule parent1 = topSchedules[random.Next(topSchedules.Count)];
-            LeshaGay.Data.Schedule parent2 = topSchedules[random.Next(topSchedules.Count)];
+            LeshaGay.Data.Schedule parent1 = top[random.Next(top.Count)];
+            LeshaGay.Data.Schedule parent2 = Population[random.Next(Population.Count)];
 
-            return parent1.Fitness > parent2.Fitness ? parent1 : parent2;
+            return random.Next(2)==0 ? parent1 : parent2;
+            //return parent1.Fitness > parent2.Fitness ? parent1 : parent2;
         }
 
         public void InitializePopulation()
@@ -208,25 +209,25 @@ namespace LeshaGay
 
             fitness -= lessonGroups.Count()*2;
 
-            // Оценка окон между парами у преподавателей
-            //var teacherLessons = schedule.LessonPlans
-            //    .GroupBy(x => x.LessonGroup.LessonGroupTeachers.First().Teacher);
+            //Оценка окон между парами у преподавателей
+            var teacherLessons = schedule.LessonPlans
+                .GroupBy(x => x.LessonGroup.LessonGroupTeachers.First().Teacher);
 
-            //foreach (var teacherLessonGroup in teacherLessons)
-            //{
-            //    foreach (var dailyLessons in teacherLessonGroup.GroupBy(l => l.DayOfWeek))
-            //    {
-            //        var orderedLessons = dailyLessons.OrderBy(l => l.LessonNumber).ToList();
-            //        for (int i = 1; i < orderedLessons.Count; i++)
-            //        {
-            //            int gap = orderedLessons[i].LessonNumber - orderedLessons[i - 1].LessonNumber;
-            //            if (gap > 1)
-            //            {
-            //                fitness -= (gap - 1); // Штраф за каждое окно
-            //            }
-            //        }
-            //    }
-            //}
+            foreach (var teacherLessonGroup in teacherLessons)
+            {
+                foreach (var dailyLessons in teacherLessonGroup.GroupBy(l => l.DayOfWeek))
+                {
+                    var orderedLessons = dailyLessons.OrderBy(l => l.LessonNumber).ToList();
+                    for (int i = 1; i < orderedLessons.Count; i++)
+                    {
+                        int gap = orderedLessons[i].LessonNumber - orderedLessons[i - 1].LessonNumber;
+                        if (gap > 1)
+                        {
+                            fitness -= (gap - 1); // Штраф за каждое окно
+                        }
+                    }
+                }
+            }
 
             //Оценка распределённости дисциплин по разным дням
             var groupedLessons = schedule.LessonPlans.GroupBy(lp => lp.LessonGroup.Group).ToDictionary(g => g.Key, g => g.ToList());
@@ -285,19 +286,19 @@ namespace LeshaGay
         public static int CountTeacherCollisions(IEnumerable<Lesson> lessons)
         {
             // Словарь для хранения расписания уроков для каждого преподавателя
-            var teacherSchedules = new Dictionary<int, List<(int DayOfWeek, int LessonNumber)>>();
+            var teacherSchedules = new Dictionary<Teacher, List<(int DayOfWeek, int LessonNumber)>>();
 
             // Заполнение словаря данными о расписании уроков
             foreach (var lesson in lessons)
             {
                 foreach (var lessonGroupTeacher in lesson.LessonGroup.LessonGroupTeachers)
                 {
-                    int teacherId = lessonGroupTeacher.TeacherId;
-                    if (!teacherSchedules.ContainsKey(teacherId))
+                    Teacher teacher = lessonGroupTeacher.Teacher;
+                    if (!teacherSchedules.ContainsKey(teacher))
                     {
-                        teacherSchedules[teacherId] = new List<(int, int)>();
+                        teacherSchedules[teacher] = new List<(int, int)>();
                     }
-                    teacherSchedules[teacherId].Add((lesson.DayOfWeek, lesson.LessonNumber));
+                    teacherSchedules[teacher].Add((lesson.DayOfWeek, lesson.LessonNumber));
                 }
             }
 
@@ -348,14 +349,14 @@ namespace LeshaGay
             var childSchedule = new LeshaGay.Data.Schedule();
 
             // Group lessons by LessonGroupId
-            var groupedLessons1 = parent1.LessonPlans.GroupBy(lesson => lesson.LessonGroupId).ToDictionary(g => g.Key, g => g.ToList());
-            var groupedLessons2 = parent2.LessonPlans.GroupBy(lesson => lesson.LessonGroupId).ToDictionary(g => g.Key, g => g.ToList());
+            var groupedLessons1 = parent1.LessonPlans.GroupBy(lesson => lesson.LessonGroup.Group).ToDictionary(g => g.Key, g => g.ToList());
+            var groupedLessons2 = parent2.LessonPlans.GroupBy(lesson => lesson.LessonGroup.Group).ToDictionary(g => g.Key, g => g.ToList());
 
-            var allGroupIds = groupedLessons1.Keys.Union(groupedLessons2.Keys).Distinct();
+            var allGroups = groupedLessons1.Keys.Union(groupedLessons2.Keys).Distinct();
 
-            foreach (var groupId in allGroupIds)
+            foreach (var group in allGroups)
             {
-                if (groupedLessons1.TryGetValue(groupId, out var lessons1) && groupedLessons2.TryGetValue(groupId, out var lessons2))
+                if (groupedLessons1.TryGetValue(group, out var lessons1) && groupedLessons2.TryGetValue(group, out var lessons2))
                 {
                     List<Lesson> selectedLessons = random.Next(2) ==0 ? lessons1 : lessons2;
                     foreach (var lesson in selectedLessons)
@@ -404,6 +405,10 @@ namespace LeshaGay
                                         lesson2.DayOfWeek = randWeekday1;
                                         lesson2.LessonNumber = randLessonNum1;
                                     }
+                                }
+                                else
+                                {
+                                    mutationFailed = true;
                                 }
 
                                 //if (lesson1 == null && lesson2 == null)
